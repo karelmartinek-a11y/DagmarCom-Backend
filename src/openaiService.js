@@ -30,7 +30,8 @@ async function callOpenAI({ messages, responseId }) {
 
   if (!res.ok) {
     const text = await res.text();
-    logger.error({ status: res.status, text }, 'OpenAI call failed');
+    const redacted = text.replace(/sk-[A-Za-z0-9_\-]{10,}/g, '[redacted]');
+    logger.error({ status: res.status, text: redacted }, 'OpenAI call failed');
     throw new Error(`OpenAI API error ${res.status}`);
   }
 
