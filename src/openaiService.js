@@ -29,10 +29,14 @@ async function callOpenAI({ messages, responseId }) {
   };
 
   if (responseId) {
-    body.response_id = responseId; // kontinuita konverzace dle zadani
+    body.previous_response_id = responseId; // Responses API (2025) navazuje konverzaci
   }
 
-  logOpenAI('OPENAI_REQ', { model, responseId: responseId || null, inputPreview: JSON.stringify(body).slice(0, 500) });
+  logOpenAI('OPENAI_REQ', {
+    model,
+    previous_response_id: responseId || null,
+    inputPreview: JSON.stringify(body).slice(0, 500),
+  });
 
   const data = await doRequest(apiKey, body);
   const firstOutput = data.output?.[0]?.content?.[0]?.text || data.choices?.[0]?.message?.content || '';
