@@ -200,6 +200,18 @@ app.post('/api/status/test/whatsapp', auth, async (req, res) => {
   }
 });
 
+app.post('/api/status/test/whatsapp/send', auth, async (req, res) => {
+  try {
+    const { phone, text } = req.body || {};
+    if (!phone || !text) return res.status(400).json({ ok: false, error: 'phone and text required' });
+    const result = await sendWhatsAppMessage(phone, text);
+    res.json({ ok: true, result });
+  } catch (e) {
+    logger.error({ err: e }, 'WhatsApp send test failed');
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
 app.get('/delete', async (req, res) => {
   const { phone } = req.query;
   if (!phone) return res.status(400).send('phone required');
