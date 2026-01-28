@@ -60,6 +60,7 @@ async function doRequest(apiKey, body) {
   const redacted = text.replace(/sk-[A-Za-z0-9_\\-]{10,}/g, '[redacted]');
   if (!res.ok) {
     logger.error({ status: res.status, text: redacted, attempt: 'primary' }, 'OpenAI call failed');
+    logOpenAI('ERROR', { status: res.status, text: redacted, context: 'openai_response' });
     throw new Error(`OpenAI API error ${res.status}`);
   }
   return JSON.parse(text);

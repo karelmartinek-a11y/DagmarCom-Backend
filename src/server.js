@@ -156,6 +156,14 @@ app.get('/api/status', auth, async (req, res) => {
     );
   });
 
+  const recentErrors = await new Promise((resolve) => {
+    db.all(
+      "SELECT * FROM logs WHERE direction = 'ERROR' AND created_at >= ? ORDER BY created_at DESC LIMIT 10",
+      [Date.now() - 3 * 60 * 60 * 1000],
+      (err, rows) => resolve(rows || [])
+    );
+  });
+
   const uptimeSec = process.uptime();
   const load = require('os').loadavg();
 
@@ -169,6 +177,7 @@ app.get('/api/status', auth, async (req, res) => {
     lastOutbound: lastOut,
     lastOpenAIRequest: lastOpenReq,
     lastOpenAIResponse: lastOpenRes,
+    recentErrors,
   });
 });
 
