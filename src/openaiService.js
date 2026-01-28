@@ -14,7 +14,7 @@ function logOpenAI(direction, payload) {
   );
 }
 
-async function callOpenAI({ instructions, userInput, responseId }) {
+async function callOpenAI({ instructions, developerContent, userInput, responseId }) {
   const settings = await getSettings();
   const apiKey = process.env.OPENAI_API_KEY || settings.openaiApiKey;
   if (!apiKey) {
@@ -26,6 +26,10 @@ async function callOpenAI({ instructions, userInput, responseId }) {
     model,
     instructions: instructions || '',
     input: [
+      {
+        role: 'developer',
+        content: developerContent || '',
+      },
       {
         role: 'user',
         content: userInput,
@@ -42,6 +46,7 @@ async function callOpenAI({ instructions, userInput, responseId }) {
     model,
     previous_response_id: responseId || null,
     instructionsPreview: (instructions || '').slice(0, 500),
+    developerPreview: (developerContent || '').slice(0, 500),
     inputPreview: userInput.slice(0, 500),
   });
 
