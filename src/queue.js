@@ -109,9 +109,14 @@ async function processQueue(phone) {
         },
       ];
 
+      const responseId =
+        session.last_response_id && session.last_response_at && now - session.last_response_at <= EIGHT_HOURS
+          ? session.last_response_id
+          : null;
+
       logPayload(phone, 'IN', { combinedUserText, responseId });
 
-      const aiResponse = await callOpenAI({ messages });
+      const aiResponse = await callOpenAI({ messages, responseId });
 
       const outboundText = buildOutboundText(settings, session.response_count, aiResponse.text);
       await sendWhatsAppMessage(phone, outboundText);
