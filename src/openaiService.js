@@ -14,7 +14,7 @@ function logOpenAI(direction, payload) {
   );
 }
 
-async function callOpenAI({ messages, responseId }) {
+async function callOpenAI({ messages }) {
   const settings = await getSettings();
   const apiKey = process.env.OPENAI_API_KEY || settings.openaiApiKey;
   if (!apiKey) {
@@ -28,11 +28,7 @@ async function callOpenAI({ messages, responseId }) {
     metadata: { source: 'DagmarCom' },
   };
 
-  if (responseId) {
-    body.response_id = responseId; // pokus o navazani; pokud API nepodporuje, server vrati 4xx a zalogujeme
-  }
-
-  logOpenAI('OPENAI_REQ', { model, responseId: responseId || null, inputPreview: JSON.stringify(body).slice(0, 500) });
+  logOpenAI('OPENAI_REQ', { model, inputPreview: JSON.stringify(body).slice(0, 500) });
 
   const res = await fetch('https://api.openai.com/v1/responses', {
     method: 'POST',
