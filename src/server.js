@@ -6,7 +6,8 @@ const db = require('./db');
 const logger = require('./logger');
 const { enqueueMessage } = require('./queue');
 const { getSettings, updateSettings } = require('./settingsService');
-const { logPayload } = require('./whatsappService');
+const { logPayload, sendWhatsAppMessage } = require('./whatsappService');
+const { callOpenAI } = require('./openaiService');
 
 const app = express();
 app.use(cors());
@@ -123,6 +124,80 @@ app.get('/api/logs/chat', auth, async (req, res) => {
     return res.send(content);
   }
   return res.json({ phone, lines });
+});
+
+app.get('/api/status', auth, async (req, res) => {
+  const settings = await getSettings();
+  const apiKeySet = Boolean(process.env.OPENAI_API_KEY || settings.openaiApiKey);
+  const whatsappSet = Boolean(process.env.WHATSAPP_TOKEN || process.env.WHATSAPP_PHONE_NUMBER_ID);
+
+  const dbOk = await new Promise((resolve) => {
+    db.get('SELECT 1', [], (err) => resolve(!err));
+  });
+
+  const lastIn = await new Promise((resolve) => {
+    db.get('SELECT * FROM logs WHERE direction = ? ORDER BY created_at DESC LIMIT 1', ['IN'], (err, row) =>
+      resolve(row || null)
+    );
+  });
+  const lastOut = await new Promise((resolve) => {
+    db.get('SELECT * FROM logs WHERE direction = ? ORDER BY created_at DESC LIMIT 1', ['OUT'], (err, row) =>
+      resolve(row || null)
+    );
+  });
+  const lastOpenReq = await new Promise((resolve) => {
+    db.get('SELECT * FROM logs WHERE direction = ? ORDER BY created_at DESC LIMIT 1', ['OPENAI_REQ'], (err, row) =>
+      resolve(row || null)
+    );
+  });
+  const lastOpenRes = await new Promise((resolve) => {
+    db.get('SELECT * FROM logs WHERE direction = ? ORDER BY created_at DESC LIMIT 1', ['OPENAI_RES'], (err, row) =>
+      resolve(row || null)
+    );
+  });
+
+  const uptimeSec = process.uptime();
+  const load = require('os').loadavg();
+
+  res.json({
+    apiKeySet,
+    whatsappSet,
+    dbOk,
+    uptimeSec,
+    load,
+    lastInbound: lastIn,
+    lastOutbound: lastOut,
+    lastOpenAIRequest: lastOpenReq,
+    lastOpenAIResponse: lastOpenRes,
+  });
+});
+
+app.post('/api/status/test/openai', auth, async (req, res) => {
+  try {
+    const testMsg = [{ role: 'user', content: 'ping' }];
+    const result = await callOpenAI({ messages: testMsg });
+    res.json({ ok: true, responseId: result.responseId, preview: result.text.slice(0, 200) });
+  } catch (e) {
+    logger.error({ err: e }, 'OpenAI test failed');
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.post('/api/status/test/whatsapp', auth, async (req, res) => {
+  try {
+    // harmless info call
+    const token = process.env.WHATSAPP_TOKEN;
+    const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+    if (!token || !phoneNumberId) throw new Error('Chybi WhatsApp token/id');
+    const resp = await fetch(`https://graph.facebook.com/v20.0/${phoneNumberId}?fields=id`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const data = await resp.json();
+    res.json({ ok: resp.ok, status: resp.status, body: data });
+  } catch (e) {
+    logger.error({ err: e }, 'WhatsApp test failed');
+    res.status(500).json({ ok: false, error: e.message });
+  }
 });
 
 app.get('/delete', async (req, res) => {
