@@ -8,6 +8,7 @@ const { enqueueMessage } = require('./queue');
 const { getSettings, updateSettings } = require('./settingsService');
 const { logPayload, sendWhatsAppMessage } = require('./whatsappService');
 const { callOpenAI } = require('./openaiService');
+const { processInbox, testEmailConnections } = require('./emailService');
 
 const app = express();
 app.use(cors());
@@ -130,6 +131,7 @@ app.get('/api/status', auth, async (req, res) => {
   const settings = await getSettings();
   const apiKeySet = Boolean(process.env.OPENAI_API_KEY || settings.openaiApiKey);
   const whatsappSet = Boolean(process.env.WHATSAPP_TOKEN || process.env.WHATSAPP_PHONE_NUMBER_ID);
+  const emailSet = Boolean(settings.imapHost && settings.smtpHost && settings.imapUser && settings.imapPass);
 
   const dbOk = await new Promise((resolve) => {
     db.get('SELECT 1', [], (err) => resolve(!err));
@@ -170,6 +172,7 @@ app.get('/api/status', auth, async (req, res) => {
   res.json({
     apiKeySet,
     whatsappSet,
+    emailSet,
     dbOk,
     uptimeSec,
     load,
@@ -217,6 +220,26 @@ app.post('/api/status/test/whatsapp/send', auth, async (req, res) => {
     res.json({ ok: true, result });
   } catch (e) {
     logger.error({ err: e }, 'WhatsApp send test failed');
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.post('/api/email/test', auth, async (req, res) => {
+  try {
+    await testEmailConnections();
+    res.json({ ok: true });
+  } catch (e) {
+    logger.error({ err: e }, 'Email test failed');
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.post('/api/email/process', auth, async (req, res) => {
+  try {
+    processInbox();
+    res.json({ ok: true });
+  } catch (e) {
+    logger.error({ err: e }, 'Email processing failed');
     res.status(500).json({ ok: false, error: e.message });
   }
 });

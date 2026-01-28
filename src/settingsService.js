@@ -28,6 +28,19 @@ const DEFAULTS = {
     '\n\nPro pripadne rezervace volejte +420261090900 nebo piste na recepce@hotelchodov.cz.',
   openaiApiKey: '',
   openaiModel: 'gpt-4.1',
+  emailAutoEnabled: false,
+  emailSendMode: 'draft', // draft | send
+  imapHost: '',
+  imapPort: 993,
+  imapUser: '',
+  imapPass: '',
+  imapInbox: 'INBOX',
+  imapSpam: 'SPAM',
+  imapDrafts: 'Drafts',
+  smtpHost: '',
+  smtpPort: 587,
+  smtpUser: '',
+  smtpPass: '',
 };
 
 function getSetting(key) {
