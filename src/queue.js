@@ -77,6 +77,26 @@ async function processQueue(phone) {
         break;
       }
 
+      const instr = selectByCount(
+        session.response_count,
+        settings.instructionsFirst,
+        settings.instructionsNext,
+        settings.instructionsAlways
+      );
+      const role = selectByCount(session.response_count, settings.roleFirst, settings.roleNext, settings.roleAlways);
+      const context = selectByCount(
+        session.response_count,
+        settings.contextFirst,
+        settings.contextNext,
+        settings.contextAlways
+      );
+      const inputSuffix = selectByCount(
+        session.response_count,
+        settings.inputSuffixFirst,
+        settings.inputSuffixNext,
+        settings.inputSuffixAlways
+      );
+
       const combinedUserText = pending.map((p) => p.body).join('\n---\n');
       const responseId =
         session.last_response_id && session.last_response_at && now - session.last_response_at <= EIGHT_HOURS
@@ -86,11 +106,11 @@ async function processQueue(phone) {
       const messages = [
         {
           role: 'system',
-          content: `${settings.instructions}\nRole: ${settings.role}\nContext: ${settings.context}`,
+          content: `${instr}\nRole: ${role}\nContext: ${context}`,
         },
         {
           role: 'user',
-          content: `${combinedUserText}${settings.inputSuffix || ''}`,
+          content: `${combinedUserText}${inputSuffix || ''}`,
         },
       ];
 
@@ -123,6 +143,14 @@ function buildOutboundText(settings, responseCount, aiText) {
   return parts.join('');
 }
 
+function selectByCount(count, first, next, always) {
+  const parts = [];
+  if (count === 0 && first) parts.push(first);
+  if (count > 0 && next) parts.push(next);
+  if (always) parts.push(always);
+  return parts.join('\n').trim();
+}
+
 async function sendRetentionNotice(phone) {
   const text =
     'Chat byl po 8 hodinach uzavren. Informace z konverzace uchovavame 30 dni pro audit a bezpecnost. Pokud chcete okamzite smazat vsechny ulozene udaje, kliknete na: ' +
@@ -131,4 +159,4 @@ async function sendRetentionNotice(phone) {
   logPayload(phone, 'OUT', { retentionNotice: true, phone });
 }
 
-module.exports = { enqueueMessage, processQueue, ensureSession, buildOutboundText };
+module.exports = { enqueueMessage, processQueue, ensureSession, buildOutboundText, selectByCount };

@@ -3,13 +3,23 @@ const logger = require('./logger');
 
 const DEFAULTS = {
   autoEnabled: true,
-  instructions:
+  instructionsFirst:
     'Odpovidej strucne, jasne a v cestine. Poskytuj pouze verejne dostupne informace o hotelu Chodov ASC v Praze a okoli.',
-  role: 'Hotel concierge AI',
-  context:
+  instructionsNext:
+    'Pokud jde o navazujici dotaz, drz se predchoziho kontextu a udrzuj odpoved kratkou.',
+  instructionsAlways:
+    'Vyhybej se citlivym udajum hostu, neposkytuj osobni data ani rezervacni udaje.',
+  roleFirst: 'Hotel concierge AI',
+  roleNext: 'Hotel concierge AI',
+  roleAlways: '',
+  contextFirst:
     'Jednas jmenem hotelu Chodov ASC (Aqua Sport Club s.r.o., Medrova 169/22, 142 00 Praha 4, ICO 27125529). Reaguj profesionalne a zdvorile.',
-  inputSuffix:
+  contextNext: 'Pokracuj v tonaci a referencich na hotel Chodov ASC.',
+  contextAlways: '',
+  inputSuffixFirst:
     '\n\n---\nDolozka: dopln a strukturovane odpovez na dotaz hosta. Pokud chybi informace, navrhni jak ji zjistit.',
+  inputSuffixNext: '\n\n---\nNavazuj na predchozi odpoved a vyhni se opakovani.',
+  inputSuffixAlways: '',
   outputPrefixFirst:
     'Dekujeme za zpravu. Jsem digitalni concierge hotelu Chodov ASC. ',
   outputPrefixNext:
