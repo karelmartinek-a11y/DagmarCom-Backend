@@ -98,25 +98,17 @@ async function processQueue(phone) {
       );
 
       const combinedUserText = pending.map((p) => p.body).join('\n---\n');
-      const messages = [
-        {
-          role: 'system',
-          content: `${instr}\nRole: ${role}\nContext: ${context}`,
-        },
-        {
-          role: 'user',
-          content: `${combinedUserText}${inputSuffix || ''}`,
-        },
-      ];
+      const systemInstructions = `${instr}\nRole: ${role}\nContext: ${context}`.trim();
+      const userInput = `${combinedUserText}${inputSuffix || ''}`;
 
       const responseId =
         session.last_response_id && session.last_response_at && now - session.last_response_at <= EIGHT_HOURS
           ? session.last_response_id
           : null;
 
-      logPayload(phone, 'IN', { combinedUserText, responseId });
+      logPayload(phone, 'IN', { userInput, responseId });
 
-      const aiResponse = await callOpenAI({ messages, responseId });
+      const aiResponse = await callOpenAI({ instructions: systemInstructions, userInput, responseId });
 
       const outboundText = buildOutboundText(settings, session.response_count, aiResponse.text);
       await sendWhatsAppMessage(phone, outboundText);

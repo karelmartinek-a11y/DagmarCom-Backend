@@ -14,7 +14,7 @@ function logOpenAI(direction, payload) {
   );
 }
 
-async function callOpenAI({ messages, responseId }) {
+async function callOpenAI({ instructions, userInput, responseId }) {
   const settings = await getSettings();
   const apiKey = process.env.OPENAI_API_KEY || settings.openaiApiKey;
   if (!apiKey) {
@@ -24,7 +24,13 @@ async function callOpenAI({ messages, responseId }) {
   const model = settings.openaiModel || 'gpt-4.1';
   const body = {
     model,
-    input: messages, // Responses API 2025 pouziva 'input' namisto 'messages'
+    instructions: instructions || '',
+    input: [
+      {
+        role: 'user',
+        content: userInput,
+      },
+    ],
     metadata: { source: 'DagmarCom' },
   };
 
@@ -35,7 +41,8 @@ async function callOpenAI({ messages, responseId }) {
   logOpenAI('OPENAI_REQ', {
     model,
     previous_response_id: responseId || null,
-    inputPreview: JSON.stringify(body).slice(0, 500),
+    instructionsPreview: (instructions || '').slice(0, 500),
+    inputPreview: userInput.slice(0, 500),
   });
 
   const data = await doRequest(apiKey, body);
