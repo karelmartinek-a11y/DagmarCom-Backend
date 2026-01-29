@@ -38,14 +38,14 @@ jobs:
           password: ${{ secrets.DEPLOY_PASS }}
           script: |
             set -e
-            if [ ! -d /srv/hcas/_repos/dagmarcom-backend/.git ]; then
-              git clone https://github.com/karelmartinek-a11y/DagmarCom-Backend.git /srv/hcas/_repos/dagmarcom-backend
+            if [ ! -d /srv/hcasc/_repos/dagmarcom-backend/.git ]; then
+              git clone https://github.com/karelmartinek-a11y/DagmarCom-Backend.git /srv/hcasc/_repos/dagmarcom-backend
             fi
-            cd /srv/hcas/_repos/dagmarcom-backend
+            cd /srv/hcasc/_repos/dagmarcom-backend
             git fetch origin main
             git checkout main
             git reset --hard origin/main
-            rsync -a --delete --exclude='.git' --exclude='node_modules' --exclude='data' --exclude='logs' /srv/hcas/_repos/dagmarcom-backend/ /opt/dagmarcom/backend/
+            rsync -a --delete --exclude='.git' --exclude='node_modules' --exclude='data' --exclude='logs' /srv/hcasc/_repos/dagmarcom-backend/ /opt/dagmarcom/backend/
             cd /opt/dagmarcom/backend
             npm ci
             /opt/dagmarcom/sandbox/run-tests.sh
