@@ -48,6 +48,7 @@ jobs:
             rsync -a --delete --exclude='.git' --exclude='node_modules' --exclude='data' --exclude='logs' /srv/hcas/_repos/dagmarcom-backend/ /opt/dagmarcom/backend/
             cd /opt/dagmarcom/backend
             npm ci
+            /opt/dagmarcom/sandbox/run-tests.sh
             systemctl restart dagmarcom-backend.service
             mkdir -p /var/log/api-hcasc
             printf '%s DagmarCom backend: auto-deploy main\n' "$(date '+%F %T')" >> /var/log/api-hcasc/deploy.log
