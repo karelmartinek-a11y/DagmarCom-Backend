@@ -15,6 +15,7 @@ function logOpenAI(direction, payload) {
 }
 
 async function callOpenAI({ instructions, developerContent, userInput, responseId }) {
+  const safeInput = userInput || 'ping';
   const settings = await getSettings();
   const apiKey = process.env.OPENAI_API_KEY || settings.openaiApiKey;
   if (!apiKey) {
@@ -24,34 +25,43 @@ async function callOpenAI({ instructions, developerContent, userInput, responseI
   const model = settings.openaiModel || 'gpt-4.1';
   const body = {
     model,
-    instructions: instructions || '',
+    instructions: instructions || 'Jsi stručný a zdvořilý asistent hotelu.',
     input: [
-      {
-        role: 'developer',
-        content: developerContent || '',
-      },
+      ...(developerContent
+        ? [
+            {
+              role: 'developer',
+              content: developerContent,
+            },
+          ]
+        : []),
       {
         role: 'user',
-        content: userInput,
+        content: safeInput,
       },
     ],
+    max_output_tokens: 400,
+    temperature: 0.6,
     metadata: { source: 'DagmarCom' },
   };
-
-  if (responseId) {
-    body.previous_response_id = responseId; // Responses API (2025) navazuje konverzaci
-  }
+  if (responseId) body.previous_response_id = responseId;
 
   logOpenAI('OPENAI_REQ', {
     model,
     previous_response_id: responseId || null,
     instructionsPreview: (instructions || '').slice(0, 500),
     developerPreview: (developerContent || '').slice(0, 500),
-    inputPreview: userInput.slice(0, 500),
+    inputPreview: (safeInput || '').slice(0, 500),
   });
+  // Audit log celého payloadu (bez klíče)
+  logOpenAI('OPENAI_PAYLOAD', { model, previous_response_id: responseId || null, body });
 
   const data = await doRequest(apiKey, body);
-  const firstOutput = data.output?.[0]?.content?.[0]?.text || data.choices?.[0]?.message?.content || '';
+  const firstOutput =
+    data.output?.[0]?.content?.[0]?.text ||
+    data.output?.[0]?.content?.map((c) => c.text).join('\n') ||
+    data.choices?.[0]?.message?.content ||
+    '';
   const responseIdResult = data.id || data.response_id || null;
 
   logOpenAI('OPENAI_RES', { responseId: responseIdResult, preview: firstOutput.slice(0, 500) });

@@ -37,10 +37,18 @@ const DEFAULTS = {
   imapInbox: 'INBOX',
   imapSpam: 'SPAM',
   imapDrafts: 'Drafts',
+  imapSent: 'Sent',
+  pop3Host: '',
+  pop3Port: 110,
+  pop3User: '',
+  pop3Pass: '',
+  pop3UseSsl: false,
   smtpHost: '',
   smtpPort: 587,
   smtpUser: '',
   smtpPass: '',
+  adminUsername: '',
+  adminPasswordHash: '',
 };
 
 function getSetting(key) {
@@ -61,7 +69,14 @@ async function getSettings() {
   const entries = await Promise.all(
     Object.keys(DEFAULTS).map(async (key) => [key, await getSetting(key)])
   );
-  return Object.fromEntries(entries);
+  const result = Object.fromEntries(entries);
+  if (!result.openaiApiKey && process.env.OPENAI_API_KEY) {
+    result.openaiApiKey = process.env.OPENAI_API_KEY;
+  }
+  if (!result.adminUsername && process.env.BASIC_USER) {
+    result.adminUsername = process.env.BASIC_USER;
+  }
+  return result;
 }
 
 function setSetting(key, value) {
@@ -88,4 +103,14 @@ async function updateSettings(body) {
   return getSettings();
 }
 
-module.exports = { getSettings, updateSettings, DEFAULTS };
+async function saveAdminCredentials(username, passwordHash) {
+  if (username !== undefined) {
+    await setSetting('adminUsername', username);
+  }
+  if (passwordHash !== undefined) {
+    await setSetting('adminPasswordHash', passwordHash);
+  }
+  return getSettings();
+}
+
+module.exports = { getSettings, updateSettings, DEFAULTS, saveAdminCredentials };

@@ -36,6 +36,8 @@ async function sendWhatsAppMessage(phone, text) {
   if (!res.ok) {
     throw new Error(`WhatsApp API error ${res.status}`);
   }
+  // Log pro monitoring doručení (safely, bez retry)
+  logPayload(phone, 'OUT_STATUS', { status: 'sent', wa_message_id: data?.messages?.[0]?.id || null });
   return data;
 }
 

@@ -2,13 +2,14 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const basicAuth = require('basic-auth');
+const crypto = require('crypto');
 const db = require('./db');
 const logger = require('./logger');
 const { enqueueMessage } = require('./queue');
-const { getSettings, updateSettings } = require('./settingsService');
+const { getSettings, updateSettings, saveAdminCredentials } = require('./settingsService');
 const { logPayload, sendWhatsAppMessage } = require('./whatsappService');
 const { callOpenAI } = require('./openaiService');
-const { processInbox, testEmailConnections } = require('./emailService');
+const { processInbox, testEmailConnections, listMailboxes, sendResetEmail } = require('./emailService');
 
 const app = express();
 app.use(cors());
@@ -17,13 +18,49 @@ app.use(express.json({ limit: '1mb' }));
 const BASIC_USER = process.env.BASIC_USER || 'admin';
 const BASIC_PASS = process.env.BASIC_PASS || '+Sin8glov8';
 
-function auth(req, res, next) {
+function hashPassword(pass) {
+  return crypto.createHash('sha256').update(pass).digest('hex');
+}
+
+async function getAuthConfig() {
+  const settings = await getSettings();
+  const user = settings.adminUsername || BASIC_USER;
+  const passHash = settings.adminPasswordHash || hashPassword(BASIC_PASS);
+  return { user, passHash };
+}
+
+async function auth(req, res, next) {
   const creds = basicAuth(req);
-  if (!creds || creds.name !== BASIC_USER || creds.pass !== BASIC_PASS) {
+  const { user, passHash } = await getAuthConfig();
+  if (!creds || creds.name !== user || hashPassword(creds.pass) !== passHash) {
     res.set('WWW-Authenticate', 'Basic realm="DagmarCom"');
     return res.status(401).send('Auth required');
   }
   return next();
+}
+
+function persistResetToken(email, token) {
+  return new Promise((resolve, reject) => {
+    db.run(
+      'INSERT INTO reset_tokens(token, email, created_at) VALUES(?, ?, ?)',
+      [token, email, Date.now()],
+      (err) => (err ? reject(err) : resolve())
+    );
+  });
+}
+
+function consumeResetToken(token, maxAgeMinutes = 60) {
+  return new Promise((resolve, reject) => {
+    db.get('SELECT * FROM reset_tokens WHERE token = ?', [token], (err, row) => {
+      if (err) return reject(err);
+      if (!row) return resolve(null);
+      if (row.created_at < Date.now() - maxAgeMinutes * 60 * 1000) {
+        db.run('DELETE FROM reset_tokens WHERE token = ?', [token], () => resolve(null));
+        return;
+      }
+      db.run('DELETE FROM reset_tokens WHERE token = ?', [token], () => resolve(row));
+    });
+  });
 }
 
 app.get('/health', (req, res) => {
@@ -33,14 +70,16 @@ app.get('/health', (req, res) => {
 app.post('/webhook/whatsapp', async (req, res) => {
   try {
     const { phone, text } = extractWhatsAppMessage(req.body);
+    // Logujeme vždy, i statusy bez telefonu/textu
+    logPayload(phone || null, 'IN', req.body);
+
     if (!phone || !text) {
-      logger.warn({ body: req.body }, 'Webhook bez telefonu nebo textu');
-      return res.status(400).json({ error: 'Missing phone or text' });
+      logger.warn({ body: req.body }, 'Webhook bez telefonu nebo textu (pravděpodobně status)');
+      return res.status(200).json({ ok: true, ignored: true });
     }
 
-    logPayload(phone, 'IN', req.body);
     await enqueueMessage(phone, text);
-    return res.status(200).json({ ok: true });
+    return res.status(200).json({ ok: true, queued: true });
   } catch (err) {
     logger.error({ err, body: req.body }, 'Webhook error');
     return res.status(500).json({ error: 'internal_error' });
@@ -49,6 +88,7 @@ app.post('/webhook/whatsapp', async (req, res) => {
 
 app.get('/api/settings', auth, async (req, res) => {
   const settings = await getSettings();
+  delete settings.adminPasswordHash;
   res.json(settings);
 });
 
@@ -127,11 +167,71 @@ app.get('/api/logs/chat', auth, async (req, res) => {
   return res.json({ phone, lines });
 });
 
+app.post('/api/status/reset-link', async (req, res) => {
+  try {
+    const { user } = req.body || {};
+    const email = (user || '').trim();
+    if (!email) return res.status(400).json({ error: 'email_required' });
+    const token = crypto.randomBytes(24).toString('hex');
+    await persistResetToken(email, token);
+    const origin = req.headers.origin || `https://${req.headers.host || 'api.hcasc.cz'}`;
+    await sendResetEmail(email, token, origin);
+    res.json({ ok: true, message: 'Reset link odeslán na e-mail.' });
+  } catch (err) {
+    logger.error({ err }, 'Reset link failed');
+    if (err.code === 'SMTP_CONFIG_MISSING') return res.status(400).json({ error: 'smtp_missing' });
+    res.status(500).json({ error: 'reset_failed' });
+  }
+});
+
+app.post('/api/status/reset-password', async (req, res) => {
+  try {
+    const { token, password, user } = req.body || {};
+    if (!token || typeof token !== 'string' || token.length < 16) {
+      return res.status(400).json({ error: 'token_invalid' });
+    }
+    if (!password || password.length < 8) {
+      return res.status(400).json({ error: 'password_too_short' });
+    }
+    const row = await consumeResetToken(token);
+    if (!row) return res.status(400).json({ error: 'token_expired_or_invalid' });
+    const username = (user || row.email || BASIC_USER).trim() || BASIC_USER;
+    const hash = hashPassword(password);
+    await saveAdminCredentials(username, hash);
+    logger.info({ username }, 'Admin heslo bylo resetováno pomocí tokenu');
+    res.json({ ok: true, message: 'Heslo nastaveno. Přihlašte se novým heslem.' });
+  } catch (err) {
+    logger.error({ err }, 'Reset password failed');
+    res.status(500).json({ error: 'reset_failed' });
+  }
+});
+
+app.post('/api/status/alert/whatsapp', async (req, res) => {
+  try {
+    const dest = process.env.ALERT_WA || '+420704602569';
+    const { error, note } = req.body || {};
+    const text = `DagmarCom STATUS chyba: ${error || 'neznámá'}${note ? ` | ${note}` : ''}`;
+    const result = await sendWhatsAppMessage(dest, text);
+    res.json({ ok: true, result });
+  } catch (err) {
+    logger.error({ err }, 'WA alert failed');
+    res.status(500).json({ error: 'wa_alert_failed', detail: err.message });
+  }
+});
+
 app.get('/api/status', auth, async (req, res) => {
   const settings = await getSettings();
   const apiKeySet = Boolean(process.env.OPENAI_API_KEY || settings.openaiApiKey);
   const whatsappSet = Boolean(process.env.WHATSAPP_TOKEN || process.env.WHATSAPP_PHONE_NUMBER_ID);
-  const emailSet = Boolean(settings.imapHost && settings.smtpHost && settings.imapUser && settings.imapPass);
+  const emailSet = Boolean(
+    settings.imapHost &&
+      settings.smtpHost &&
+      settings.imapUser &&
+      settings.imapPass &&
+      settings.smtpUser &&
+      settings.smtpPass
+  );
+  const resetEmailReady = Boolean(settings.smtpHost && settings.smtpUser && settings.smtpPass);
 
   const dbOk = await new Promise((resolve) => {
     db.get('SELECT 1', [], (err) => resolve(!err));
@@ -157,6 +257,39 @@ app.get('/api/status', auth, async (req, res) => {
       resolve(row || null)
     );
   });
+  const lastEmail = await new Promise((resolve) => {
+    db.get(
+      "SELECT * FROM logs WHERE direction LIKE 'EMAIL_%' ORDER BY created_at DESC LIMIT 1",
+      [],
+      (err, row) => resolve(row || null)
+    );
+  });
+  const lastEmailError = await new Promise((resolve) => {
+    db.get(
+      "SELECT * FROM logs WHERE direction = 'EMAIL_ERROR' ORDER BY created_at DESC LIMIT 1",
+      [],
+      (err, row) => resolve(row || null)
+    );
+  });
+  const lastEmailErrorRecent =
+    lastEmailError && lastEmailError.created_at < Date.now() - 30 * 60 * 1000 ? null : lastEmailError;
+  const emailActivity24h = await new Promise((resolve) => {
+    db.get(
+      "SELECT count(*) as c FROM logs WHERE direction LIKE 'EMAIL_%' AND created_at >= ?",
+      [Date.now() - 24 * 3600 * 1000],
+      (err, row) => resolve(row ? row.c : 0)
+    );
+  });
+  const emailDraftCount = await new Promise((resolve) => {
+    db.get(
+      "SELECT count(*) as c FROM logs WHERE direction = 'EMAIL_DRAFT' AND created_at >= ?",
+      [Date.now() - 6 * 3600 * 1000],
+      (err, row) => resolve(row ? row.c : 0)
+    );
+  });
+  const emailHealthy =
+    emailSet &&
+    (!lastEmailErrorRecent || (lastEmail && lastEmail.created_at && lastEmail.created_at > lastEmailErrorRecent.created_at));
 
   const recentErrors = await new Promise((resolve) => {
     db.all(
@@ -166,13 +299,35 @@ app.get('/api/status', auth, async (req, res) => {
     );
   });
 
+  const recentActivity = await new Promise((resolve) => {
+    db.all(
+      'SELECT direction, phone, payload, created_at FROM logs ORDER BY created_at DESC LIMIT 15',
+      [],
+      (err, rows) => resolve(rows || [])
+    );
+  });
+
   const uptimeSec = process.uptime();
   const load = require('os').loadavg();
+
+  // extra metrics from status.json (generated healthprobe) if present
+  let metrics = {};
+  try {
+    const fs = require('fs');
+    const path = require('path');
+    const p = path.join(__dirname, '..', 'data', 'status-cache.json');
+    if (fs.existsSync(p)) {
+      metrics = JSON.parse(fs.readFileSync(p, 'utf-8'));
+    }
+  } catch (e) {
+    metrics = {};
+  }
 
   res.json({
     apiKeySet,
     whatsappSet,
     emailSet,
+    resetEmailReady,
     dbOk,
     uptimeSec,
     load,
@@ -180,7 +335,14 @@ app.get('/api/status', auth, async (req, res) => {
     lastOutbound: lastOut,
     lastOpenAIRequest: lastOpenReq,
     lastOpenAIResponse: lastOpenRes,
+    lastEmail,
+    lastEmailError: lastEmailErrorRecent,
+    emailActivity24h,
+    emailDraftCount,
+    emailHealthy,
     recentErrors,
+    recentActivity,
+    metrics,
   });
 });
 
@@ -241,6 +403,35 @@ app.post('/api/email/process', auth, async (req, res) => {
   } catch (e) {
     logger.error({ err: e }, 'Email processing failed');
     res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.get('/api/email/folders', auth, async (req, res) => {
+  try {
+    const boxes = await listMailboxes();
+    res.json({ ok: true, boxes });
+  } catch (e) {
+    if (e.code === 'IMAP_CONFIG_MISSING') {
+      return res.status(400).json({ ok: false, error: e.message });
+    }
+    logger.error({ err: e }, 'Email folders failed');
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.post('/api/email/test-reset', auth, async (req, res) => {
+  try {
+    const { user } = req.body || {};
+    const settings = await getSettings();
+    const target = (user || settings.smtpUser || settings.imapUser || '').trim();
+    if (!target) return res.status(400).json({ error: 'email_required' });
+    const token = crypto.randomBytes(8).toString('hex');
+    const origin = req.headers.origin || `https://${req.headers.host || 'api.hcasc.cz'}`;
+    await sendResetEmail(target, token, origin);
+    res.json({ ok: true, message: 'Testovací reset e-mail odeslán.' });
+  } catch (e) {
+    logger.error({ err: e }, 'Test reset email failed');
+    res.status(500).json({ error: 'test_reset_failed', detail: e.message });
   }
 });
 

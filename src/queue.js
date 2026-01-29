@@ -99,8 +99,8 @@ async function processQueue(phone) {
 
       const combinedUserText = pending.map((p) => p.body).join('\n---\n');
       const instructions = instr.trim();
-      const developerContent = [role, context].filter(Boolean).join('\n').trim();
-      const userInput = [context, combinedUserText].filter(Boolean).join('\n---\n') + (inputSuffix || '');
+      const developerContent = [role].filter(Boolean).join('\n').trim();
+      const userInput = [context, combinedUserText].filter(Boolean).join('\n\n').trim() + (inputSuffix || '');
 
       const responseId =
         session.last_response_id && session.last_response_at && now - session.last_response_at <= EIGHT_HOURS

@@ -54,6 +54,14 @@ db.serialize(() => {
       created_at INTEGER NOT NULL
     )
   `);
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS reset_tokens (
+      token TEXT PRIMARY KEY,
+      email TEXT NOT NULL,
+      created_at INTEGER NOT NULL
+    )
+  `);
 });
 
 module.exports = db;
