@@ -57,6 +57,7 @@ jobs:
               echo "DAGMARCOM_DEPLOY_TAG=${DEPLOY_TAG}" > /opt/dagmarcom/backend/.env
             fi
             cd /opt/dagmarcom/backend
+            rm -rf node_modules
             npm ci
             /opt/dagmarcom/sandbox/run-tests.sh
             systemctl restart dagmarcom-backend.service
