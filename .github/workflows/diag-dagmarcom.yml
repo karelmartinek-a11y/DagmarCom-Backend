@@ -15,12 +15,17 @@ jobs:
           password: ${{ secrets.DEPLOY_PASS }}
           script: |
             set -e
-            echo "== pm2 list =="
-            pm2 list
-            echo "== pm2 info dagmarcom =="
-            pm2 info dagmarcom || true
-            echo "== pm2 logs dagmarcom (last 200) =="
-            pm2 logs dagmarcom --lines 200 --nostream || true
+            echo "== docker ps =="
+            docker ps
+            echo "== docker ps | grep dagmar =="
+            docker ps | grep -i dagmar || true
+            CID=$(docker ps --filter 'name=dagmar' --format '{{.ID}}' | head -n1)
+            if [ -n "$CID" ]; then
+              echo "== docker logs (last 200) for $CID =="
+              docker logs --tail 200 "$CID" || true
+            else
+              echo "Nenalezen zadny kontejner s nazvem obsahujicim 'dagmar'"
+            fi
             echo "== curl /api/settings with default creds =="
             AUTH=$(printf 'admin:+Sin8glov8' | base64)
             curl -v -H "Authorization: Basic $AUTH" https://api.hcasc.cz/api/settings -o /tmp/diag_settings.json || true
