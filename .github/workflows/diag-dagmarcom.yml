@@ -26,6 +26,15 @@ jobs:
             else
               echo "Nenalezen zadny kontejner s nazvem obsahujicim 'dagmar'"
             fi
+            echo "== processes matching dagmar =="
+            ps axu | grep dagmar | grep -v grep || true
+            echo "== lsof :9001 =="
+            lsof -i :9001 || true
+            echo \"== find app.log (limited) ==\"
+            find /srv /opt /var -maxdepth 4 -type f -name 'app.log' 2>/dev/null | head -n 20
+            echo \"== tail app.log if present ==\"
+            for f in $(find /srv /opt /var -maxdepth 4 -type f -name 'app.log' 2>/dev/null | head -n 5); do
+              echo \"--- $f ---\"; tail -n 80 \"$f\"; done
             echo "== curl /api/settings with default creds =="
             AUTH=$(printf 'admin:+Sin8glov8' | base64)
             curl -v -H "Authorization: Basic $AUTH" https://api.hcasc.cz/api/settings -o /tmp/diag_settings.json || true
