@@ -244,6 +244,20 @@ app.post('/api/status/alert/whatsapp', async (req, res) => {
 });
 
 app.get('/api/status', auth, async (req, res) => {
+  const normalizeLog = (row) => {
+    if (!row) return null;
+    const out = { ...row };
+    const ts = Number(out.created_at);
+    if (Number.isFinite(ts)) {
+      out.created_at = ts;
+      out.created_at_iso = new Date(ts).toISOString();
+    } else {
+      out.created_at = null;
+      out.created_at_iso = null;
+    }
+    return out;
+  };
+
   const settings = await getSettings();
   const apiKeySet = Boolean(process.env.OPENAI_API_KEY || settings.openaiApiKey);
   const whatsappSet = Boolean(process.env.WHATSAPP_TOKEN || process.env.WHATSAPP_PHONE_NUMBER_ID);
@@ -355,17 +369,17 @@ app.get('/api/status', auth, async (req, res) => {
     dbOk,
     uptimeSec,
     load,
-    lastInbound: lastIn,
-    lastOutbound: lastOut,
-    lastOpenAIRequest: lastOpenReq,
-    lastOpenAIResponse: lastOpenRes,
-    lastEmail,
-    lastEmailError: lastEmailErrorRecent,
+    lastInbound: normalizeLog(lastIn),
+    lastOutbound: normalizeLog(lastOut),
+    lastOpenAIRequest: normalizeLog(lastOpenReq),
+    lastOpenAIResponse: normalizeLog(lastOpenRes),
+    lastEmail: normalizeLog(lastEmail),
+    lastEmailError: normalizeLog(lastEmailErrorRecent),
     emailActivity24h,
     emailDraftCount,
     emailHealthy,
-    recentErrors,
-    recentActivity,
+    recentErrors: recentErrors.map(normalizeLog),
+    recentActivity: recentActivity.map(normalizeLog),
     metrics,
   });
 });
