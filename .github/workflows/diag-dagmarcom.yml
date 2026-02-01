@@ -1,0 +1,27 @@
+name: Diagnose DagmarCom
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Inspect dagmarcom service on server
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          password: ${{ secrets.DEPLOY_PASS }}
+          script: |
+            set -e
+            echo "== pm2 list =="
+            pm2 list
+            echo "== pm2 info dagmarcom =="
+            pm2 info dagmarcom || true
+            echo "== pm2 logs dagmarcom (last 200) =="
+            pm2 logs dagmarcom --lines 200 --nostream || true
+            echo "== curl /api/settings with default creds =="
+            AUTH=$(printf 'admin:+Sin8glov8' | base64)
+            curl -v -H "Authorization: Basic $AUTH" https://api.hcasc.cz/api/settings -o /tmp/diag_settings.json || true
+            head -c 200 /tmp/diag_settings.json || true
