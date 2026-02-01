@@ -45,7 +45,17 @@ jobs:
             git fetch origin main
             git checkout main
             git reset --hard origin/main
+            DEPLOY_TAG=$(git rev-parse --short HEAD)
             rsync -a --delete --exclude='.git' --exclude='node_modules' --exclude='data' --exclude='logs' /srv/hcasc/_repos/dagmarcom-backend/ /opt/dagmarcom/backend/
+            if [ -f /opt/dagmarcom/backend/.env ]; then
+              if grep -q '^DAGMARCOM_DEPLOY_TAG=' /opt/dagmarcom/backend/.env; then
+                sed -i "s/^DAGMARCOM_DEPLOY_TAG=.*/DAGMARCOM_DEPLOY_TAG=${DEPLOY_TAG}/" /opt/dagmarcom/backend/.env
+              else
+                echo "DAGMARCOM_DEPLOY_TAG=${DEPLOY_TAG}" >> /opt/dagmarcom/backend/.env
+              fi
+            else
+              echo "DAGMARCOM_DEPLOY_TAG=${DEPLOY_TAG}" > /opt/dagmarcom/backend/.env
+            fi
             cd /opt/dagmarcom/backend
             npm ci
             /opt/dagmarcom/sandbox/run-tests.sh

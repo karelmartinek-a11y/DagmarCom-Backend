@@ -67,6 +67,13 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', time: new Date().toISOString() });
 });
 
+app.get('/api/version', (req, res) => {
+  res.json({
+    backend_deploy_tag: process.env.DAGMARCOM_DEPLOY_TAG || 'unknown',
+    environment: process.env.DAGMARCOM_ENV || process.env.NODE_ENV || 'production',
+  });
+});
+
 app.post('/webhook/whatsapp', async (req, res) => {
   try {
     const { phone, text } = extractWhatsAppMessage(req.body);
