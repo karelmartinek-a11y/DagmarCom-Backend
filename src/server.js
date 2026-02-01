@@ -11,6 +11,13 @@ const { logPayload, sendWhatsAppMessage } = require('./whatsappService');
 const { callOpenAI } = require('./openaiService');
 const { processInbox, testEmailConnections, listMailboxes, sendResetEmail } = require('./emailService');
 
+process.on('unhandledRejection', (err) => {
+  logger.error({ err }, 'Unhandled rejection');
+});
+process.on('uncaughtException', (err) => {
+  logger.error({ err }, 'Uncaught exception');
+});
+
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: '1mb' }));
@@ -30,13 +37,18 @@ async function getAuthConfig() {
 }
 
 async function auth(req, res, next) {
-  const creds = basicAuth(req);
-  const { user, passHash } = await getAuthConfig();
-  if (!creds || creds.name !== user || hashPassword(creds.pass) !== passHash) {
-    res.set('WWW-Authenticate', 'Basic realm="DagmarCom"');
-    return res.status(401).send('Auth required');
+  try {
+    const creds = basicAuth(req);
+    const { user, passHash } = await getAuthConfig();
+    if (!creds || creds.name !== user || hashPassword(creds.pass) !== passHash) {
+      res.set('WWW-Authenticate', 'Basic realm="DagmarCom"');
+      return res.status(401).send('Auth required');
+    }
+    return next();
+  } catch (err) {
+    logger.error({ err }, 'Auth failed');
+    return res.status(503).json({ error: 'auth_failed' });
   }
-  return next();
 }
 
 function persistResetToken(email, token) {
@@ -94,9 +106,14 @@ app.post('/webhook/whatsapp', async (req, res) => {
 });
 
 app.get('/api/settings', auth, async (req, res) => {
-  const settings = await getSettings();
-  delete settings.adminPasswordHash;
-  res.json(settings);
+  try {
+    const settings = await getSettings();
+    delete settings.adminPasswordHash;
+    res.json(settings);
+  } catch (err) {
+    logger.error({ err }, 'Load settings failed');
+    res.status(500).json({ error: 'settings_load_failed' });
+  }
 });
 
 app.post('/api/settings', auth, async (req, res) => {

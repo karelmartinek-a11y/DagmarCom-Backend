@@ -15,6 +15,7 @@ jobs:
           password: ${{ secrets.DEPLOY_PASS }}
           script: |
             set -e
+            set -x
             echo "== docker ps =="
             docker ps
             echo "== docker ps | grep dagmar =="
@@ -28,14 +29,16 @@ jobs:
             fi
             echo "== processes matching dagmar =="
             ps axu | grep dagmar | grep -v grep || true
-            echo "== lsof :9001 =="
-            lsof -i :9001 || true
-            echo \"== find app.log (limited) ==\"
+            echo "== listening processes (node/uvicorn) =="
+            lsof -i -P -n | grep -Ei ':(8080|9001|9000|3000)' || true
+            echo "== nginx upstream for api.hcasc.cz =="
+            sudo cat /etc/nginx/sites-enabled/api.hcasc.cz || true
+            echo "== find app.log (limited) =="
             find /srv /opt /var -maxdepth 4 -type f -name 'app.log' 2>/dev/null | head -n 20
-            echo \"== tail app.log if present ==\"
-            for f in $(find /srv /opt /var -maxdepth 4 -type f -name 'app.log' 2>/dev/null | head -n 5); do
-              echo \"--- $f ---\"; tail -n 80 \"$f\"; done
+            echo "== tail app.log if present =="
+            find /srv /opt /var -maxdepth 4 -type f -name 'app.log' 2>/dev/null | head -n 5 | while read -r f; do
+              echo "--- $f ---"; tail -n 120 "$f"; done
             echo "== curl /api/settings with default creds =="
             AUTH=$(printf 'admin:+Sin8glov8' | base64)
             curl -v -H "Authorization: Basic $AUTH" https://api.hcasc.cz/api/settings -o /tmp/diag_settings.json || true
-            head -c 200 /tmp/diag_settings.json || true
+            head -c 400 /tmp/diag_settings.json || true
