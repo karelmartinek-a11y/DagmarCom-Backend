@@ -109,16 +109,25 @@ async function processQueue(phone) {
 
       logPayload(phone, 'IN', { userInput, developerContent, responseId });
 
-      const aiResponse = await callOpenAI({ instructions, developerContent, userInput, responseId });
+      try {
+        const aiResponse = await callOpenAI({ instructions, developerContent, userInput, responseId });
 
-      const outboundText = buildOutboundText(settings, session.response_count, aiResponse.text);
-      await sendWhatsAppMessage(phone, outboundText);
+        const outboundText = buildOutboundText(settings, session.response_count, aiResponse.text);
+        await safeSendWhatsAppMessage(phone, outboundText);
 
-      await runStmt('UPDATE message_queue SET processed = 1 WHERE phone = ? AND processed = 0', [phone]);
-      await runStmt(
-        'UPDATE sessions SET last_response_id = ?, last_response_at = ?, response_count = response_count + 1 WHERE phone = ?',
-        [aiResponse.responseId || null, Date.now(), phone]
-      );
+        await runStmt('UPDATE message_queue SET processed = 1 WHERE phone = ? AND processed = 0', [phone]);
+        await runStmt(
+          'UPDATE sessions SET last_response_id = ?, last_response_at = ?, response_count = response_count + 1 WHERE phone = ?',
+          [aiResponse.responseId || null, Date.now(), phone]
+        );
+      } catch (err) {
+        logger.error({ err, phone }, 'Chyba pri generovani/odeslani odpovedi');
+        await safeSendWhatsAppMessage(
+          phone,
+          'Omlouvame se, automaticka odpoved se ted nepodarila odeslat. Zkuste to prosim znovu nebo volejte recepci +420261090900.'
+        );
+        await runStmt('UPDATE message_queue SET processed = 1 WHERE phone = ? AND processed = 0', [phone]);
+      }
     }
   } catch (err) {
     logger.error({ err, phone }, 'Chyba pri zpracovani fronty');
@@ -148,8 +157,16 @@ async function sendRetentionNotice(phone) {
   const text =
     'Chat byl po 8 hodinach uzavren. Informace z konverzace uchovavame 30 dni pro audit a bezpecnost. Pokud chcete okamzite smazat vsechny ulozene udaje, kliknete na: ' +
     `${DELETE_BASE_URL}?phone=${encodeURIComponent(phone)}`;
-  await sendWhatsAppMessage(phone, text);
+  await safeSendWhatsAppMessage(phone, text);
   logPayload(phone, 'OUT', { retentionNotice: true, phone });
+}
+
+async function safeSendWhatsAppMessage(phone, text) {
+  try {
+    await sendWhatsAppMessage(phone, text);
+  } catch (err) {
+    logger.error({ err, phone }, 'Odeslani WhatsApp zpravy selhalo');
+  }
 }
 
 module.exports = { enqueueMessage, processQueue, ensureSession, buildOutboundText, selectByCount };
