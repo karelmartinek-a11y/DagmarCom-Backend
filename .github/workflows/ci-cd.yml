@@ -43,6 +43,7 @@ jobs:
               git clone "$REPO_URL" /srv/hcasc/_repos/dagmarcom-backend
             fi
             cd /srv/hcasc/_repos/dagmarcom-backend
+            git remote set-url origin "$REPO_URL"
             git fetch origin main
             git checkout main
             git reset --hard origin/main
