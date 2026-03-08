@@ -38,14 +38,14 @@ jobs:
           password: ${{ secrets.DEPLOY_PASS }}
           script: |
             set -e
-            SSH_CMD="ssh -i /root/.ssh/deploy_dagmarcom_backend -o IdentitiesOnly=yes"
+            REPO_URL="https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/karelmartinek-a11y/dagmarcom-backend.git"
             if [ ! -d /srv/hcasc/_repos/dagmarcom-backend/.git ]; then
-              GIT_SSH_COMMAND="$SSH_CMD" git clone git@github.com:karelmartinek-a11y/dagmarcom-backend.git /srv/hcasc/_repos/dagmarcom-backend
+              git clone "$REPO_URL" /srv/hcasc/_repos/dagmarcom-backend
             fi
             cd /srv/hcasc/_repos/dagmarcom-backend
-            GIT_SSH_COMMAND="$SSH_CMD" git fetch origin main
-            GIT_SSH_COMMAND="$SSH_CMD" git checkout main
-            GIT_SSH_COMMAND="$SSH_CMD" git reset --hard origin/main
+            git fetch origin main
+            git checkout main
+            git reset --hard origin/main
             DEPLOY_TAG=$(git rev-parse --short HEAD)
             rsync -a --delete --exclude='.git' --exclude='node_modules' --exclude='data' --exclude='logs' /srv/hcasc/_repos/dagmarcom-backend/ /opt/dagmarcom/backend/
             if [ -f /opt/dagmarcom/backend/.env ]; then
