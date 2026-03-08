@@ -61,6 +61,6 @@ jobs:
             rm -rf node_modules
             npm ci
             /opt/dagmarcom/sandbox/run-tests.sh
-            systemctl restart dagmarcom-backend.service
+            sudo systemctl restart dagmarcom-backend.service
             mkdir -p /var/log/api-hcasc
             printf '%s DagmarCom backend: auto-deploy main\n' "$(date '+%F %T')" >> /var/log/api-hcasc/deploy.log
