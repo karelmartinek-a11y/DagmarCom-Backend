@@ -33,16 +33,20 @@ async function getAuthConfig() {
   const settings = await getSettings();
   const user = settings.adminUsername || BASIC_USER;
   const passHash = settings.adminPasswordHash || hashPassword(BASIC_PASS);
-  return { user, passHash };
+  const enabled = settings.adminEnabled !== false;
+  return { user, passHash, enabled };
 }
 
 async function auth(req, res, next) {
   try {
     const creds = basicAuth(req);
-    const { user, passHash } = await getAuthConfig();
+    const { user, passHash, enabled } = await getAuthConfig();
     if (!creds || creds.name !== user || hashPassword(creds.pass) !== passHash) {
       res.set('WWW-Authenticate', 'Basic realm="DagmarCom"');
       return res.status(401).send('Auth required');
+    }
+    if (!enabled) {
+      return res.status(403).json({ error: 'admin_disabled' });
     }
     return next();
   } catch (err) {
@@ -113,6 +117,47 @@ app.get('/api/settings', auth, async (req, res) => {
   } catch (err) {
     logger.error({ err }, 'Load settings failed');
     res.status(500).json({ error: 'settings_load_failed' });
+  }
+});
+
+app.get('/api/admin/credentials', auth, async (req, res) => {
+  try {
+    const settings = await getSettings();
+    res.json({
+      adminUsername: settings.adminUsername || BASIC_USER,
+      passwordConfigured: Boolean(settings.adminPasswordHash),
+      enabled: settings.adminEnabled !== false,
+    });
+  } catch (err) {
+    logger.error({ err }, 'Load admin credentials failed');
+    res.status(500).json({ error: 'admin_credentials_load_failed' });
+  }
+});
+
+app.put('/api/admin/credentials', auth, async (req, res) => {
+  try {
+    const { adminUsername, adminPassword, enabled } = req.body || {};
+
+    if (adminUsername !== undefined && (typeof adminUsername !== 'string' || !adminUsername.trim())) {
+      return res.status(400).json({ error: 'admin_username_required' });
+    }
+    if (adminPassword !== undefined && (typeof adminPassword !== 'string' || adminPassword.length < 8)) {
+      return res.status(400).json({ error: 'password_too_short' });
+    }
+    if (enabled !== undefined && typeof enabled !== 'boolean') {
+      return res.status(400).json({ error: 'enabled_invalid' });
+    }
+
+    const passwordHash = adminPassword !== undefined ? hashPassword(adminPassword) : undefined;
+    const settings = await saveAdminCredentials(adminUsername?.trim(), passwordHash, enabled);
+    res.json({
+      adminUsername: settings.adminUsername || BASIC_USER,
+      passwordConfigured: Boolean(settings.adminPasswordHash),
+      enabled: settings.adminEnabled !== false,
+    });
+  } catch (err) {
+    logger.error({ err }, 'Update admin credentials failed');
+    res.status(400).json({ error: 'admin_credentials_update_failed' });
   }
 });
 
@@ -221,7 +266,7 @@ app.post('/api/status/reset-password', async (req, res) => {
     if (!row) return res.status(400).json({ error: 'token_expired_or_invalid' });
     const username = (user || row.email || BASIC_USER).trim() || BASIC_USER;
     const hash = hashPassword(password);
-    await saveAdminCredentials(username, hash);
+    await saveAdminCredentials(username, hash, true);
     logger.info({ username }, 'Admin heslo bylo resetováno pomocí tokenu');
     res.json({ ok: true, message: 'Heslo nastaveno. Přihlašte se novým heslem.' });
   } catch (err) {
@@ -499,9 +544,11 @@ function extractWhatsAppMessage(body) {
   return { phone, text };
 }
 
-const port = process.env.PORT || 8080;
-app.listen(port, () => {
-  logger.info({ port }, 'DagmarCom backend naslouchá');
-});
+if (require.main === module) {
+  const port = process.env.PORT || 8080;
+  app.listen(port, () => {
+    logger.info({ port }, 'DagmarCom backend naslouchá');
+  });
+}
 
 module.exports = app;

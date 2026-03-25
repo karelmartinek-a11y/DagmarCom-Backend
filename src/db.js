@@ -115,7 +115,11 @@ function all(sql, params, callback) {
   const { params: normalized, callback: cb } = normalizeArgs(params, callback);
   return withDb((db) => {
     const stmt = db.prepare(sql);
-    const rows = stmt.all(normalized);
+    stmt.bind(normalized);
+    const rows = [];
+    while (stmt.step()) {
+      rows.push(stmt.getAsObject());
+    }
     stmt.free();
     return scheduleCallback(cb, null, rows);
   }).catch((err) => {
@@ -128,7 +132,8 @@ function get(sql, params, callback) {
   const { params: normalized, callback: cb } = normalizeArgs(params, callback);
   return withDb((db) => {
     const stmt = db.prepare(sql);
-    const row = stmt.get(normalized);
+    stmt.bind(normalized);
+    const row = stmt.step() ? stmt.getAsObject() : undefined;
     stmt.free();
     return scheduleCallback(cb, null, row);
   }).catch((err) => {

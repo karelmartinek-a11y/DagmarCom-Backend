@@ -9,6 +9,8 @@ Backend obsluhuje WhatsApp webhook, frontu dotazu, volani OpenAI Responses API a
 4. Webhook nastavte na `https://api.hcasc.cz/webhook/whatsapp`.
 
 ## API
+- `GET /api/admin/credentials` (Basic Auth) - naceteni admin username, informace o ulozenem hesle a stavu aktivace.
+- `PUT /api/admin/credentials` (Basic Auth) - zmena admin username, admin hesla i docasna aktivace/deaktivace admin uctu.
 - `POST /webhook/whatsapp` – prijem zprav z WhatsApp. Ocekava telo Meta webhooku, extrahuje `from` a `text.body`.
 - `GET/POST /api/settings` (Basic Auth admin/+Sin8glov8) – nacteni/ulozeni nastaveni (autoEnabled, trifazove instructions/role/context/inputSuffix, outputPrefix*, openaiApiKey, openaiModel).
 - `GET /api/logs` (Basic Auth) – filtrace logu podle telefonu, fulltextu, casu.

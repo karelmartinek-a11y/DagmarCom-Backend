@@ -49,6 +49,7 @@ const DEFAULTS = {
   smtpPass: '',
   adminUsername: '',
   adminPasswordHash: '',
+  adminEnabled: true,
 };
 
 function getSetting(key) {
@@ -103,12 +104,15 @@ async function updateSettings(body) {
   return getSettings();
 }
 
-async function saveAdminCredentials(username, passwordHash) {
+async function saveAdminCredentials(username, passwordHash, enabled) {
   if (username !== undefined) {
     await setSetting('adminUsername', username);
   }
   if (passwordHash !== undefined) {
     await setSetting('adminPasswordHash', passwordHash);
+  }
+  if (enabled !== undefined) {
+    await setSetting('adminEnabled', enabled);
   }
   return getSettings();
 }
